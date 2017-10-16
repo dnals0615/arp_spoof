@@ -13,31 +13,6 @@
 #include<netinet/in.h>
 
 
-typedef struct{
-/*ethernet header*/
-    u_char targ_hw_addr[6];
-    u_char src_hw_addr[6];
-    u_short ether_type;
-/**/                     
-    u_int16_t	hw_type;
-    u_int16_t	prot_type;
-    u_int8_t	hw_addr_size;
-    u_int8_t 	prot_addr_size;
-    u_int16_t 	op_code;
-    u_int8_t 	source_mac[6];
-    u_int8_t 	source_ip[4];
-    u_int8_t 	destination_mac[6];
-    u_int8_t 	destination_ip[4];
-}arp_packet;
-
-typedef struct{
-/*ehternet header*/
-}tcp_ip_packet;
-
-
-
-
-
 void get_mac_address(u_int8_t *mac_address, u_int8_t *interface)
 {
 	int fd;
@@ -58,11 +33,6 @@ void get_ip_address(u_int8_t *ip_address, u_int8_t *interface) {
 	ioctl(fd, SIOCGIFADDR, &ifr);
 	memcpy(ip_address, &((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr, 4);
 	close(fd);
-}
-
-void ARP_INFECTON()
-{
-	
 }
 
 
