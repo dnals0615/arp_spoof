@@ -12,6 +12,20 @@
 #include<arpa/inet.h>
 #include<netinet/in.h>
 
+typedef struct{
+	//ethernet header
+	u_int8_t target_mac_addr[6];
+    	u_int8_t source_mac_addr[6];
+    	u_int16_t ether_type;
+	//ipv4 header
+	u_int16_t a;
+	u_int16_t TL;
+	u_int32_t b,c;
+	u_int8_t src_ip[4];
+	u_int8_t des_ip[4];		
+	
+}ether_ip_header;
+
 
 void get_mac_address(u_int8_t *mac_address, u_int8_t *interface)
 {
@@ -50,6 +64,9 @@ int main(int argc, char *argv[])
        	u_int8_t sender_ip[4];
         u_int8_t receiver_mac[6];
         u_int8_t receiver_ip[4];
+	ether_ip_header *packet_relay;
+
+
 
 
 	/* Define the device */
@@ -177,9 +194,16 @@ int main(int argc, char *argv[])
 	 while(1)
         {
                 pcap_next_ex(handle, &header, &packet_get);
-                if( (packet_get[12] == 0x08) && (packet_get[13] == 0x06) && (packet_get[20] == 0x00) && (packet_get[21] == 0x02) && (packet_get[28] == sender_ip[0]) &&
-                (packet_get[29] == sender_ip[1]) && (packet_get[30] == sender_ip[2]) && (packet_get[31] == sender_ip[3]) )      break;
-        }
+                if( (packet_get[6]==sender_mac[0])&&(packet_get[7]==sender_mac[1])&&(packet_get[8]==sender_mac[2])&&(packet_get[9]==sender_mac[3])&&(packet_get[10]==sender_mac[4])&&
+		(packet_get[11]==sender_mac[5])&&(packet_get[30]==receiver_ip[0])&&(packet_get[31]==receiver_ip[1])&&(packet_get[32]==receiver_ip[2])&&(packet_get[33]==receiver_ip[3]) )
+		break;
+	}
+
+	packet_relay = (ether_ip_header*)(packet_get);
+	pcap_sendpacket(handle, packet_relay,60);
+	
+	
+
 
 
 /*************______________________ARP REPLY FINISH_____________________________________*****************/
@@ -192,3 +216,15 @@ int main(int argc, char *argv[])
 
 
  }
+
+
+
+
+
+
+
+
+
+
+
+
